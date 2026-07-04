@@ -126,7 +126,9 @@ let state = {
         },
         selectedJobId: null, // detail view tracker
         selectedJobForApplicants: null, // owner view applicants tracker
-        uploadedCV: null // temporary cv upload tracker
+        uploadedCV: null, // temporary cv upload tracker
+        showDeleteConfirmForJobId: null, // custom delete modal tracker
+        showLogoutConfirm: false // custom logout modal tracker
     }
 };
 
@@ -216,17 +218,7 @@ function logAction(message, type) {
 let splashTimeout;
 function checkSplashTimer() {
     clearTimeout(splashTimeout);
-    if (state.session.activeActor === "mahasiswa" && state.session.navigation.mahasiswa === "home") {
-        // do nothing if already home
-    } else if (state.session.activeActor === "mahasiswa" && state.session.navigation.mahasiswa === "splash") {
-        splashTimeout = setTimeout(() => {
-            if (state.session.activeActor === "mahasiswa" && state.session.navigation.mahasiswa === "splash") {
-                state.session.navigation.mahasiswa = "login";
-                logAction("Splash Screen selesai (timeout 2.5s) -> Beralih ke halaman Login", "mahasiswa");
-                renderScreen();
-            }
-        }, 2500);
-    }
+    // Dinonaktifkan agar pengguna harus memilih peran secara eksplisit
 }
 
 // Route helper
@@ -321,6 +313,53 @@ function renderScreen() {
                 html = getProfilOwnerHTML(fidelity);
                 break;
         }
+    }
+    
+    // Custom Modal Overlays
+    if (state.session.showDeleteConfirmForJobId) {
+        const jobId = state.session.showDeleteConfirmForJobId;
+        const job = state.lowongan.find(j => j.id === jobId);
+        html += `
+            <div class="custom-modal-backdrop" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px);">
+                <div class="card border-0 shadow-lg p-4 w-100 text-center" style="max-width: 320px; border-radius: 20px; background-color: white; z-index: 2010; animation: modalFadeIn 0.2s ease;">
+                    <div class="text-danger mb-3">
+                        <span class="material-icons" style="font-size: 48px;">warning</span>
+                    </div>
+                    <h4 class="fs-6 fw-bold mb-2 text-dark">Hapus Lowongan Pekerjaan?</h4>
+                    <p class="text-muted small mb-4">Apakah Anda yakin ingin menghapus lowongan <strong>${job ? job.posisi : 'Pekerjaan'}</strong>? Berkas pelamar terkait juga akan dihapus.</p>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <button class="btn btn-sm btn-light w-100 py-2 border rounded-3 fw-semibold text-muted" onclick="cancelDeleteLowongan()">Batal</button>
+                        </div>
+                        <div class="col-6">
+                            <button class="btn btn-sm btn-danger w-100 py-2 rounded-3 fw-semibold" onclick="confirmDeleteLowongan('${jobId}')">Hapus</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    if (state.session.showLogoutConfirm) {
+        html += `
+            <div class="custom-modal-backdrop" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px);">
+                <div class="card border-0 shadow-lg p-4 w-100 text-center" style="max-width: 320px; border-radius: 20px; background-color: white; z-index: 2010; animation: modalFadeIn 0.2s ease;">
+                    <div class="text-warning mb-3">
+                        <span class="material-icons" style="font-size: 48px;">logout</span>
+                    </div>
+                    <h4 class="fs-6 fw-bold mb-2 text-dark">Keluar dari Aplikasi?</h4>
+                    <p class="text-muted small mb-4">Apakah Anda yakin ingin keluar dari akun Anda saat ini?</p>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <button class="btn btn-sm btn-light w-100 py-2 border rounded-3 fw-semibold text-muted" onclick="cancelLogout()">Batal</button>
+                        </div>
+                        <div class="col-6">
+                            <button class="btn btn-sm btn-danger w-100 py-2 rounded-3 fw-semibold" onclick="confirmLogout()">Keluar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
     }
     
     screen.innerHTML = html;
@@ -426,19 +465,42 @@ function getResponsiveBottomNavHTML(actor, activePage) {
 
 function getSplashHTML(fidelity) {
     return `
-        <div class="app-splash-layout" onclick="navigateTo('login')">
+        <div class="app-splash-layout">
             <div class="app-splash-logo mx-auto">
                 <img src="app_logo.png" alt="Logo">
             </div>
             <h2 class="display-6 fw-bold mb-1">Pencari Part Time</h2>
-            <p class="lead small opacity-75">Solusi Kerja Sampingan Mahasiswa Terpercaya</p>
+            <p class="lead small opacity-75 mb-4">Solusi Kerja Sampingan Mahasiswa Terpercaya</p>
             
-            <div class="mt-5 spinner-border spinner-border-sm text-light" role="status">
-                <span class="visually-hidden">Loading...</span>
+            <div class="w-100 px-3" style="max-width: 320px;">
+                <button class="btn btn-light text-primary fw-bold w-100 py-3 mb-3 shadow-sm d-flex align-items-center justify-content-center gap-2" onclick="selectSplashRole('mahasiswa')">
+                    <span class="material-icons">school</span> Masuk sebagai Mahasiswa
+                </button>
+                <button class="btn btn-outline-light fw-bold w-100 py-3 d-flex align-items-center justify-content-center gap-2" onclick="selectSplashRole('pemilik-usaha')">
+                    <span class="material-icons">storefront</span> Masuk sebagai Mitra Usaha
+                </button>
             </div>
-            <div class="small opacity-50 mt-2" style="font-size: 10px;">Ketuk layar untuk langsung melewati</div>
         </div>
     `;
+}
+
+function selectSplashRole(role) {
+    state.session.activeActor = role;
+    
+    const stBtn = document.getElementById("actor-mahasiswa-btn");
+    const owBtn = document.getElementById("actor-pemilik-btn");
+    if (stBtn && owBtn) {
+        if (role === 'mahasiswa') {
+            stBtn.className = "btn btn-xs btn-primary d-flex align-items-center gap-1 py-1 px-2 active";
+            owBtn.className = "btn btn-xs btn-outline-light d-flex align-items-center gap-1 py-1 px-2";
+        } else {
+            stBtn.className = "btn btn-xs btn-outline-light d-flex align-items-center gap-1 py-1 px-2";
+            owBtn.className = "btn btn-xs btn-primary d-flex align-items-center gap-1 py-1 px-2 active";
+        }
+    }
+    
+    logAction(`Aktor dipilih dari splash screen: ${role === "mahasiswa" ? "Mahasiswa" : "Mitra Usaha"}`, role === "mahasiswa" ? "mahasiswa" : "pemilik");
+    navigateTo("login");
 }
 
 function getLoginMahasiswaHTML(fidelity) {
@@ -1476,9 +1538,8 @@ function handleStudentRegister() {
 }
 
 function handleStudentLogout() {
-    state.session.mahasiswaLog.isLoggedIn = false;
-    logAction("Mahasiswa keluar akun (logout)", "mahasiswa");
-    navigateTo("splash");
+    state.session.showLogoutConfirm = true;
+    renderScreen();
 }
 
 function handleOwnerLogin() {
@@ -1531,9 +1592,27 @@ function handleOwnerRegister() {
 }
 
 function handleOwnerLogout() {
-    state.session.ownerLog.isLoggedIn = false;
-    logAction("Pemilik Usaha keluar akun (logout)", "pemilik");
-    navigateTo("login");
+    state.session.showLogoutConfirm = true;
+    renderScreen();
+}
+
+function cancelLogout() {
+    state.session.showLogoutConfirm = false;
+    renderScreen();
+}
+
+function confirmLogout() {
+    state.session.showLogoutConfirm = false;
+    const actor = state.session.activeActor;
+    if (actor === 'mahasiswa') {
+        state.session.mahasiswaLog.isLoggedIn = false;
+        logAction("Mahasiswa keluar akun (logout)", "mahasiswa");
+        navigateTo("splash");
+    } else {
+        state.session.ownerLog.isLoggedIn = false;
+        logAction("Pemilik Usaha keluar akun (logout)", "pemilik");
+        navigateTo("login");
+    }
 }
 
 // Student actions
@@ -1643,15 +1722,22 @@ function publishLowongan() {
 }
 
 function deleteLowongan(jobId) {
+    state.session.showDeleteConfirmForJobId = jobId;
+    renderScreen();
+}
+
+function cancelDeleteLowongan() {
+    state.session.showDeleteConfirmForJobId = null;
+    renderScreen();
+}
+
+function confirmDeleteLowongan(jobId) {
     const job = state.lowongan.find(j => j.id === jobId);
-    if (!job) return;
-    
-    if (confirm(`Apakah Anda yakin ingin menghapus lowongan ${job.posisi}?`)) {
-        state.lowongan = state.lowongan.filter(j => j.id !== jobId);
-        state.lamaran = state.lamaran.filter(l => l.jobId !== jobId);
-        logAction(`Lowongan pekerjaan ${job.posisi} berhasil dihapus beserta seluruh data pelamarnya`, "pemilik");
-        renderScreen();
-    }
+    state.lowongan = state.lowongan.filter(j => j.id !== jobId);
+    state.lamaran = state.lamaran.filter(l => l.jobId !== jobId);
+    state.session.showDeleteConfirmForJobId = null;
+    logAction(`Lowongan pekerjaan ${job ? job.posisi : 'Pekerjaan'} berhasil dihapus beserta seluruh data pelamarnya`, "pemilik");
+    renderScreen();
 }
 
 function viewApplicants(jobId) {
